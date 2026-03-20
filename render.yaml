@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: deacons-api
+    runtime: node
+    region: ohio
+    rootDir: api
+    plan: free
+    autoDeploy: true
+    buildCommand: npm ci
+    startCommand: npm run start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_COOKIE_SAMESITE
+        value: none
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+
+  - type: web
+    name: deacons-frontend
+    runtime: static
+    region: ohio
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

@@ -210,6 +210,57 @@ async function initializeSchema() {
             is_admin = EXCLUDED.is_admin`,
     ["rob", seedPasswordHash, true],
   );
+
+  // ── Ministry schema additions ──────────────────────────────────────────────
+
+  // Extend users table with ministry-specific columns
+  await ensureColumn("users", "name", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn("users", "email", "TEXT");
+  await ensureColumn("users", "type", "TEXT NOT NULL DEFAULT 'Other'");
+
+  // Backfill email from username for any rows missing it
+  await pool.query(`UPDATE users SET email = username WHERE email IS NULL`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS benevolence_requests (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      request TEXT NOT NULL DEFAULT '',
+      request_date DATE NOT NULL,
+      amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+      is_filled BOOLEAN NOT NULL DEFAULT FALSE,
+      date_filled DATE,
+      deacon_user_id INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS work_requests (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      request TEXT NOT NULL DEFAULT '',
+      request_date DATE NOT NULL,
+      is_fulfilled BOOLEAN NOT NULL DEFAULT FALSE,
+      date_fulfilled DATE,
+      deacon_user_id INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS schedule_entries (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      details TEXT DEFAULT '',
+      entry_date DATE NOT NULL,
+      created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
 }
 
 initializeSchema().catch((error) => {

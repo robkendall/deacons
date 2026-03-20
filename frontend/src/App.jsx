@@ -10,6 +10,7 @@ import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
 
 import { getCurrentUser } from "./api/auth";
 import Navigation from "./components/Navigation";
+import Benevolence from "./pages/Benevolence";
 import RequireAuth from "./components/RequireAuth";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
@@ -17,8 +18,10 @@ import Logout from "./pages/Logout";
 import PasswordReset from "./pages/PasswordReset";
 import People from "./pages/People";
 import Positions from "./pages/Positions";
+import Schedule from "./pages/Schedule";
 import UserProfile from "./pages/UserProfile";
 import UsersManagement from "./pages/UsersManagement";
+import Work from "./pages/Work";
 import "./App.css";
 
 const theme = createTheme({
@@ -39,7 +42,7 @@ const theme = createTheme({
         fontFamily: '"Avenir Next", "Segoe UI", sans-serif',
     },
     shape: {
-        borderRadius: 4,
+        borderRadius: 18,
     },
 });
 
@@ -99,6 +102,30 @@ function AppRoutes({ authLoading, onLoggedOut, onUserChange, user }) {
                 element={
                     <RequireAuth authLoading={authLoading} user={user}>
                         <Positions />
+                    </RequireAuth>
+                }
+            />
+            <Route
+                path="/benevolence"
+                element={
+                    <RequireAuth authLoading={authLoading} user={user}>
+                        <Benevolence />
+                    </RequireAuth>
+                }
+            />
+            <Route
+                path="/work"
+                element={
+                    <RequireAuth authLoading={authLoading} user={user}>
+                        <Work />
+                    </RequireAuth>
+                }
+            />
+            <Route
+                path="/schedule"
+                element={
+                    <RequireAuth authLoading={authLoading} user={user}>
+                        <Schedule />
                     </RequireAuth>
                 }
             />

@@ -1,3 +1,5 @@
+import { apiFetch } from "./client";
+
 async function readJson(response) {
   const data = await response.json().catch(() => ({}));
 
@@ -9,7 +11,7 @@ async function readJson(response) {
 }
 
 async function request(path, options = {}) {
-  const response = await fetch(path, {
+  const response = await apiFetch(path, {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",

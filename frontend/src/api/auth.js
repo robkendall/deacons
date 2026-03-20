@@ -1,3 +1,5 @@
+import { apiFetch } from "./client";
+
 async function readJson(response) {
     const data = await response.json().catch(() => ({}));
 
@@ -9,7 +11,7 @@ async function readJson(response) {
 }
 
 export async function getCurrentUser() {
-    const response = await fetch("/api/me", {
+    const response = await apiFetch("/api/me", {
         credentials: "include",
     });
 
@@ -18,7 +20,7 @@ export async function getCurrentUser() {
 }
 
 export async function login(username, password) {
-    const response = await fetch("/api/login", {
+    const response = await apiFetch("/api/login", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -32,7 +34,7 @@ export async function login(username, password) {
 }
 
 export async function resetPassword(username, newPassword) {
-    const response = await fetch("/api/password-reset", {
+    const response = await apiFetch("/api/password-reset", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -45,7 +47,7 @@ export async function resetPassword(username, newPassword) {
 }
 
 export async function logout() {
-    const response = await fetch("/api/logout", {
+    const response = await apiFetch("/api/logout", {
         method: "POST",
         credentials: "include",
     });
