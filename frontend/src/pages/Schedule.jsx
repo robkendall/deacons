@@ -2,10 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import ChevronLeftRoundedIcon from "@mui/icons-material/ChevronLeftRounded";
+import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
 
 import {
     createSchedule,
@@ -36,6 +43,10 @@ function currentMonthValue() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function todayIsoDate() {
+    return new Date().toISOString().slice(0, 10);
+}
+
 function monthBounds(monthValue) {
     const [year, month] = monthValue.split("-").map(Number);
     const firstDay = new Date(year, month - 1, 1);
@@ -51,17 +62,22 @@ function buildMonthValue(year, monthPart) {
     return `${year}-${monthPart}`;
 }
 
+function monthLabel(monthPart) {
+    const option = MONTH_OPTIONS.find((monthOption) => monthOption.value === monthPart);
+    return option ? option.label : monthPart;
+}
+
 function Schedule() {
     const [entries, setEntries] = useState([]);
     const [month, setMonth] = useState(currentMonthValue());
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [showEditor, setShowEditor] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [form, setForm] = useState({
         details: "",
-        entryDate: "",
+        entryDate: todayIsoDate(),
         title: "",
     });
 
@@ -164,8 +180,8 @@ function Schedule() {
             }
 
             setEditingId(null);
-            setForm({ details: "", entryDate: "", title: "" });
-            setShowEditor(false);
+            setForm({ details: "", entryDate: todayIsoDate(), title: "" });
+            setIsModalOpen(false);
             await loadData(month);
         } catch (requestError) {
             setError(requestError.message);
@@ -176,7 +192,7 @@ function Schedule() {
 
     function startEdit(entry) {
         setEditingId(entry.id);
-        setShowEditor(true);
+        setIsModalOpen(true);
         setForm({
             details: entry.details || "",
             entryDate: String(entry.entry_date).slice(0, 10),
@@ -188,8 +204,8 @@ function Schedule() {
         try {
             await deleteSchedule(id);
             setEditingId(null);
-            setForm({ details: "", entryDate: "", title: "" });
-            setShowEditor(false);
+            setForm({ details: "", entryDate: todayIsoDate(), title: "" });
+            setIsModalOpen(false);
             await loadData(month);
         } catch (requestError) {
             setError(requestError.message);
@@ -198,18 +214,28 @@ function Schedule() {
 
     function startNewEntry(dateKey) {
         setEditingId(null);
-        setShowEditor(true);
+        setIsModalOpen(true);
         setForm({
             details: "",
-            entryDate: dateKey || "",
+            entryDate: dateKey || todayIsoDate(),
             title: "",
         });
     }
 
     function cancelEditor() {
+        if (saving) {
+            return;
+        }
+
         setEditingId(null);
-        setShowEditor(false);
-        setForm({ details: "", entryDate: "", title: "" });
+        setIsModalOpen(false);
+        setForm({ details: "", entryDate: todayIsoDate(), title: "" });
+    }
+
+    function shiftMonth(delta) {
+        const [year, monthPart] = month.split("-").map(Number);
+        const next = new Date(year, monthPart - 1 + delta, 1);
+        setMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`);
     }
 
     return (
@@ -220,52 +246,43 @@ function Schedule() {
         >
             <Box className="hero-card form-stack" sx={{ mb: 2 }}>
                 {error ? <Alert severity="error">{error}</Alert> : null}
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                    <TextField
-                        select
-                        label="Year"
-                        value={selectedYear}
-                        onChange={(event) => setMonth(buildMonthValue(event.target.value, selectedMonthPart))}
-                    >
-                        {yearOptions.map((year) => (
-                            <MenuItem key={year} value={year}>{year}</MenuItem>
-                        ))}
-                    </TextField>
-                    <TextField
-                        select
-                        label="Month"
-                        value={selectedMonthPart}
-                        onChange={(event) => setMonth(buildMonthValue(selectedYear, event.target.value))}
-                    >
-                        {MONTH_OPTIONS.map((monthOption) => (
-                            <MenuItem key={monthOption.value} value={monthOption.value}>
-                                {monthOption.label}
-                            </MenuItem>
-                        ))}
-                    </TextField>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                    <IconButton type="button" onClick={() => shiftMonth(-1)} aria-label="Previous month" color="primary">
+                        <ChevronLeftRoundedIcon />
+                    </IconButton>
+                    <Typography variant="h6">{monthLabel(selectedMonthPart)} {selectedYear}</Typography>
+                    <IconButton type="button" onClick={() => shiftMonth(1)} aria-label="Next month" color="primary">
+                        <ChevronRightRoundedIcon />
+                    </IconButton>
                 </Stack>
-                <Stack direction="row" spacing={1}>
-                    <Button variant="contained" onClick={() => startNewEntry("")}>New Entry</Button>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }}>
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                        <TextField
+                            select
+                            label="Month"
+                            value={selectedMonthPart}
+                            onChange={(event) => setMonth(buildMonthValue(selectedYear, event.target.value))}
+                        >
+                            {MONTH_OPTIONS.map((monthOption) => (
+                                <MenuItem key={monthOption.value} value={monthOption.value}>
+                                    {monthOption.label}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                        <TextField
+                            select
+                            label="Year"
+                            value={selectedYear}
+                            onChange={(event) => setMonth(buildMonthValue(event.target.value, selectedMonthPart))}
+                        >
+                            {yearOptions.map((year) => (
+                                <MenuItem key={year} value={year}>{year}</MenuItem>
+                            ))}
+                        </TextField>
+                    </Stack>
+                    <Button variant="contained" onClick={() => startNewEntry("")}>New</Button>
                 </Stack>
             </Box>
-
-            {showEditor ? (
-                <Box component="form" className="hero-card form-stack" onSubmit={handleSubmit} sx={{ mb: 2 }}>
-                    <Typography variant="h5">{editingId ? "Edit Entry" : "New Entry"}</Typography>
-                    <TextField label="Title" value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} required />
-                    <TextField label="Entry Date" type="date" InputLabelProps={{ shrink: true }} value={form.entryDate} onChange={(e) => setForm((p) => ({ ...p, entryDate: e.target.value }))} required />
-                    <TextField label="Details" value={form.details} onChange={(e) => setForm((p) => ({ ...p, details: e.target.value }))} multiline minRows={2} />
-                    <Stack direction="row" spacing={1}>
-                        <Button type="submit" variant="contained" disabled={saving}>{saving ? "Saving..." : editingId ? "Update" : "Add"}</Button>
-                        {editingId ? (
-                            <Button type="button" color="error" variant="outlined" onClick={() => handleDelete(editingId)}>
-                                Delete
-                            </Button>
-                        ) : null}
-                        <Button type="button" variant="outlined" onClick={cancelEditor}>Close</Button>
-                    </Stack>
-                </Box>
-            ) : null}
 
             {loading ? <Typography>Loading schedule...</Typography> : null}
 
@@ -293,6 +310,7 @@ function Schedule() {
                                     <Button
                                         size="small"
                                         variant="text"
+                                        className="schedule-day-add"
                                         onClick={() => startNewEntry(cell.dateKey)}
                                     >
                                         Add
@@ -328,6 +346,47 @@ function Schedule() {
                     })}
                 </Box>
             </Box>
+
+            <Dialog open={isModalOpen} onClose={cancelEditor} fullWidth maxWidth="sm">
+                <Box component="form" onSubmit={handleSubmit}>
+                    <DialogTitle>{editingId ? "Edit Entry" : "New Entry"}</DialogTitle>
+                    <DialogContent className="form-stack" sx={{ overflowY: "visible", pt: 2 }}>
+                        <TextField
+                            label="Title"
+                            InputLabelProps={{ shrink: true }}
+                            value={form.title}
+                            onChange={(event) => setForm((previous) => ({ ...previous, title: event.target.value }))}
+                            required
+                            autoFocus
+                        />
+                        <TextField
+                            label="Entry Date"
+                            type="date"
+                            InputLabelProps={{ shrink: true }}
+                            value={form.entryDate}
+                            onChange={(event) => setForm((previous) => ({ ...previous, entryDate: event.target.value }))}
+                            required
+                        />
+                        <TextField
+                            label="Details"
+                            InputLabelProps={{ shrink: true }}
+                            value={form.details}
+                            onChange={(event) => setForm((previous) => ({ ...previous, details: event.target.value }))}
+                            multiline
+                            minRows={2}
+                        />
+                    </DialogContent>
+                    <DialogActions>
+                        {editingId ? (
+                            <Button type="button" color="error" onClick={() => handleDelete(editingId)} disabled={saving}>
+                                Delete
+                            </Button>
+                        ) : null}
+                        <Button type="button" onClick={cancelEditor} disabled={saving}>Cancel</Button>
+                        <Button type="submit" variant="contained" disabled={saving}>{saving ? "Saving..." : editingId ? "Update" : "Create"}</Button>
+                    </DialogActions>
+                </Box>
+            </Dialog>
         </PageShell>
     );
 }

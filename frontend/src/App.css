@@ -158,6 +158,17 @@
     padding: 0.45rem;
 }
 
+.schedule-day-add {
+    opacity: 0;
+    transition: opacity 160ms ease;
+}
+
+.schedule-day-add:focus-visible,
+.schedule-cell:hover .schedule-day-add,
+.schedule-cell:focus-within .schedule-day-add {
+    opacity: 1;
+}
+
 @media (max-width: 768px) {
     .workspace-main {
         padding-left: 0;
@@ -187,5 +198,9 @@
 
     .schedule-headings {
         display: none;
+    }
+
+    .schedule-day-add {
+        opacity: 1;
     }
 }

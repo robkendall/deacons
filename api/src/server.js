@@ -437,7 +437,7 @@ app.get("/api/benevolence", requireAuth, async (_req, res) => {
                     b.deacon_user_id, b.created_at, b.updated_at,
                     u.email AS deacon_email, u.type AS deacon_type
              FROM benevolence_requests b
-             JOIN users u ON u.id = b.deacon_user_id
+             LEFT JOIN users u ON u.id = b.deacon_user_id
              ORDER BY b.request_date DESC, b.created_at DESC`,
         );
 
@@ -454,16 +454,23 @@ app.post("/api/benevolence", requireAuth, async (req, res) => {
     const amount = parseAmount(req.body.amount);
     const isFilled = normalizeBoolean(req.body.isFilled);
     const dateFilled = normalizeDate(req.body.dateFilled);
-    const deaconUserId = Number(req.body.deaconUserId);
+    const hasDeaconUserId = req.body.deaconUserId !== undefined && req.body.deaconUserId !== null && req.body.deaconUserId !== "";
+    const deaconUserId = hasDeaconUserId ? Number(req.body.deaconUserId) : null;
 
-    if (!name || !request || !requestDate || amount === null || !deaconUserId) {
-        return res.status(400).json({ error: "Name, request, request date, amount, and deacon selection are required." });
+    if (!name || !request || !requestDate || amount === null) {
+        return res.status(400).json({ error: "Name, request, request date, and amount are required." });
+    }
+
+    if (hasDeaconUserId && (!Number.isInteger(deaconUserId) || deaconUserId <= 0)) {
+        return res.status(400).json({ error: "Invalid deacon selection." });
     }
 
     try {
-        const assignable = await requireAssignableUser(deaconUserId);
-        if (!assignable) {
-            return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+        if (deaconUserId !== null) {
+            const assignable = await requireAssignableUser(deaconUserId);
+            if (!assignable) {
+                return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+            }
         }
 
         const result = await pool.query(
@@ -494,16 +501,23 @@ app.put("/api/benevolence/:id", requireAuth, async (req, res) => {
     const amount = parseAmount(req.body.amount);
     const isFilled = normalizeBoolean(req.body.isFilled);
     const dateFilled = normalizeDate(req.body.dateFilled);
-    const deaconUserId = Number(req.body.deaconUserId);
+    const hasDeaconUserId = req.body.deaconUserId !== undefined && req.body.deaconUserId !== null && req.body.deaconUserId !== "";
+    const deaconUserId = hasDeaconUserId ? Number(req.body.deaconUserId) : null;
 
-    if (!id || !name || !request || !requestDate || amount === null || !deaconUserId) {
-        return res.status(400).json({ error: "ID, name, request, request date, amount, and deacon selection are required." });
+    if (!id || !name || !request || !requestDate || amount === null) {
+        return res.status(400).json({ error: "ID, name, request, request date, and amount are required." });
+    }
+
+    if (hasDeaconUserId && (!Number.isInteger(deaconUserId) || deaconUserId <= 0)) {
+        return res.status(400).json({ error: "Invalid deacon selection." });
     }
 
     try {
-        const assignable = await requireAssignableUser(deaconUserId);
-        if (!assignable) {
-            return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+        if (deaconUserId !== null) {
+            const assignable = await requireAssignableUser(deaconUserId);
+            if (!assignable) {
+                return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+            }
         }
 
         const result = await pool.query(
@@ -557,7 +571,7 @@ app.get("/api/work", requireAuth, async (_req, res) => {
                     w.deacon_user_id, w.created_at, w.updated_at,
                     u.email AS deacon_email, u.type AS deacon_type
              FROM work_requests w
-             JOIN users u ON u.id = w.deacon_user_id
+             LEFT JOIN users u ON u.id = w.deacon_user_id
              ORDER BY w.request_date DESC, w.created_at DESC`,
         );
 
@@ -573,16 +587,23 @@ app.post("/api/work", requireAuth, async (req, res) => {
     const requestDate = normalizeDate(req.body.requestDate);
     const isFulfilled = normalizeBoolean(req.body.isFulfilled);
     const dateFulfilled = normalizeDate(req.body.dateFulfilled);
-    const deaconUserId = Number(req.body.deaconUserId);
+    const hasDeaconUserId = req.body.deaconUserId !== undefined && req.body.deaconUserId !== null && req.body.deaconUserId !== "";
+    const deaconUserId = hasDeaconUserId ? Number(req.body.deaconUserId) : null;
 
-    if (!name || !request || !requestDate || !deaconUserId) {
-        return res.status(400).json({ error: "Name, request, request date, and deacon selection are required." });
+    if (!name || !request || !requestDate) {
+        return res.status(400).json({ error: "Name, request, and request date are required." });
+    }
+
+    if (hasDeaconUserId && (!Number.isInteger(deaconUserId) || deaconUserId <= 0)) {
+        return res.status(400).json({ error: "Invalid deacon selection." });
     }
 
     try {
-        const assignable = await requireAssignableUser(deaconUserId);
-        if (!assignable) {
-            return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+        if (deaconUserId !== null) {
+            const assignable = await requireAssignableUser(deaconUserId);
+            if (!assignable) {
+                return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+            }
         }
 
         const result = await pool.query(
@@ -611,16 +632,23 @@ app.put("/api/work/:id", requireAuth, async (req, res) => {
     const requestDate = normalizeDate(req.body.requestDate);
     const isFulfilled = normalizeBoolean(req.body.isFulfilled);
     const dateFulfilled = normalizeDate(req.body.dateFulfilled);
-    const deaconUserId = Number(req.body.deaconUserId);
+    const hasDeaconUserId = req.body.deaconUserId !== undefined && req.body.deaconUserId !== null && req.body.deaconUserId !== "";
+    const deaconUserId = hasDeaconUserId ? Number(req.body.deaconUserId) : null;
 
-    if (!id || !name || !request || !requestDate || !deaconUserId) {
-        return res.status(400).json({ error: "ID, name, request, request date, and deacon selection are required." });
+    if (!id || !name || !request || !requestDate) {
+        return res.status(400).json({ error: "ID, name, request, and request date are required." });
+    }
+
+    if (hasDeaconUserId && (!Number.isInteger(deaconUserId) || deaconUserId <= 0)) {
+        return res.status(400).json({ error: "Invalid deacon selection." });
     }
 
     try {
-        const assignable = await requireAssignableUser(deaconUserId);
-        if (!assignable) {
-            return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+        if (deaconUserId !== null) {
+            const assignable = await requireAssignableUser(deaconUserId);
+            if (!assignable) {
+                return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+            }
         }
 
         const result = await pool.query(
