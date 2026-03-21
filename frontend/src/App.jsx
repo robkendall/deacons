@@ -13,14 +13,14 @@ import Navigation from "./components/Navigation";
 import Benevolence from "./pages/Benevolence";
 import RequireAuth from "./components/RequireAuth";
 import Dashboard from "./pages/Dashboard";
+import Information from "./pages/Information";
 import Login from "./pages/Login";
 import Logout from "./pages/Logout";
 import PasswordReset from "./pages/PasswordReset";
-import People from "./pages/People";
-import Positions from "./pages/Positions";
 import Schedule from "./pages/Schedule";
 import UserProfile from "./pages/UserProfile";
 import UsersManagement from "./pages/UsersManagement";
+import Widows from "./pages/Widows";
 import Work from "./pages/Work";
 import "./App.css";
 
@@ -82,10 +82,10 @@ function AppRoutes({ authLoading, onLoggedOut, onUserChange, user }) {
                 }
             />
             <Route
-                path="/people"
+                path="/widows"
                 element={
                     <RequireAuth authLoading={authLoading} user={user}>
-                        <People />
+                        <Widows />
                     </RequireAuth>
                 }
             />
@@ -94,14 +94,6 @@ function AppRoutes({ authLoading, onLoggedOut, onUserChange, user }) {
                 element={
                     <RequireAuth authLoading={authLoading} user={user}>
                         <UsersManagement />
-                    </RequireAuth>
-                }
-            />
-            <Route
-                path="/positions"
-                element={
-                    <RequireAuth authLoading={authLoading} user={user}>
-                        <Positions />
                     </RequireAuth>
                 }
             />
@@ -126,6 +118,14 @@ function AppRoutes({ authLoading, onLoggedOut, onUserChange, user }) {
                 element={
                     <RequireAuth authLoading={authLoading} user={user}>
                         <Schedule />
+                    </RequireAuth>
+                }
+            />
+            <Route
+                path="/information"
+                element={
+                    <RequireAuth authLoading={authLoading} user={user}>
+                        <Information user={user} />
                     </RequireAuth>
                 }
             />

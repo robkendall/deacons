@@ -9,7 +9,7 @@ function UserProfile({ user }) {
         <PageShell
             eyebrow="Profile"
             title="Authenticated profile"
-            description="Session-backed profile details for the scheduler app."
+            description="Session-backed profile details for the deacons app."
         >
             <section className="route-card">
                 <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
@@ -17,10 +17,16 @@ function UserProfile({ user }) {
                     <Chip label={user?.isAdmin ? "Admin" : "Standard user"} color="secondary" variant="outlined" />
                 </Stack>
                 <Typography variant="body1" sx={{ mb: 1 }}>
-                    Username
+                    Name
                 </Typography>
                 <Typography variant="h5" sx={{ mb: 2 }}>
-                    {user?.username || "Unknown user"}
+                    {user?.name || "Unknown user"}
+                </Typography>
+                <Typography variant="body1" sx={{ mb: 1 }}>
+                    Email
+                </Typography>
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                    {user?.email || "Unknown email"}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                     Use the Auth Users page to modify accounts and privileges.

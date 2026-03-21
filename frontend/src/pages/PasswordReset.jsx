@@ -10,7 +10,7 @@ import { Link as RouterLink } from "react-router-dom";
 import { resetPassword } from "../api/auth";
 
 function PasswordReset() {
-    const [username, setUsername] = useState("");
+    const [email, setEmail] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
@@ -23,7 +23,7 @@ function PasswordReset() {
         setSuccess("");
 
         try {
-            await resetPassword(username, newPassword);
+            await resetPassword(email, newPassword);
             setSuccess("Password updated. You can sign in now.");
             setNewPassword("");
         } catch (requestError) {
@@ -41,14 +41,15 @@ function PasswordReset() {
                 </Typography>
                 <Typography variant="h4">Password reset</Typography>
                 <Typography variant="body1" color="text.secondary">
-                    For this starter build, reset uses username + new password directly.
+                    Reset uses email + new password directly.
                 </Typography>
                 {error ? <Alert severity="error">{error}</Alert> : null}
                 {success ? <Alert severity="success">{success}</Alert> : null}
                 <TextField
-                    label="Username"
-                    value={username}
-                    onChange={(event) => setUsername(event.target.value)}
+                    label="Email"
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
                     required
                 />
                 <TextField

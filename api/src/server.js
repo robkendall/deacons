@@ -152,7 +152,7 @@ function isDateBlocked(date, blocks) {
 
 async function refreshSessionUser(req) {
   const result = await pool.query(
-    "SELECT id, username, is_admin FROM users WHERE id = $1",
+    "SELECT id, name, email, is_admin FROM users WHERE id = $1",
     [req.session.userId],
   );
 
@@ -161,7 +161,7 @@ async function refreshSessionUser(req) {
     return null;
   }
 
-  req.session.userName = user.username;
+  req.session.userName = user.name;
   req.session.userIsAdmin = user.is_admin;
   return user;
 }
@@ -220,44 +220,46 @@ app.get("/api/me", async (req, res) => {
   return res.json({
     user: {
       id: user.id,
-      username: user.username,
+      name: user.name,
+      email: user.email,
       isAdmin: user.is_admin,
     },
   });
 });
 
 app.post("/api/login", async (req, res) => {
-  const username = normalizeText(req.body.username).toLowerCase();
+  const email = normalizeText(req.body.email).toLowerCase();
   const password = String(req.body.password || "");
 
-  if (!username || !password) {
-    return res.status(400).json({ error: "Username and password are required." });
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required." });
   }
 
   try {
     const result = await pool.query(
-      "SELECT id, username, password_hash, is_admin FROM users WHERE LOWER(username) = $1",
-      [username],
+      "SELECT id, name, email, password_hash, is_admin FROM users WHERE LOWER(email) = $1",
+      [email],
     );
 
     const user = result.rows[0];
     if (!user) {
-      return res.status(401).json({ error: "Invalid username or password." });
+      return res.status(401).json({ error: "Invalid email or password." });
     }
 
     const passwordMatches = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatches) {
-      return res.status(401).json({ error: "Invalid username or password." });
+      return res.status(401).json({ error: "Invalid email or password." });
     }
 
     req.session.userId = user.id;
-    req.session.userName = user.username;
+    req.session.userName = user.name;
     req.session.userIsAdmin = user.is_admin;
 
     return res.json({
       user: {
         id: user.id,
-        username: user.username,
+        name: user.name,
+        email: user.email,
         isAdmin: user.is_admin,
       },
     });
@@ -278,11 +280,11 @@ app.post("/api/logout", (req, res) => {
 });
 
 app.post("/api/password-reset", async (req, res) => {
-  const username = normalizeText(req.body.username).toLowerCase();
+  const email = normalizeText(req.body.email).toLowerCase();
   const newPassword = String(req.body.newPassword || "");
 
-  if (!username || !newPassword) {
-    return res.status(400).json({ error: "Username and new password are required." });
+  if (!email || !newPassword) {
+    return res.status(400).json({ error: "Email and new password are required." });
   }
 
   if (newPassword.length < 4) {
@@ -294,9 +296,9 @@ app.post("/api/password-reset", async (req, res) => {
     const result = await pool.query(
       `UPDATE users
        SET password_hash = $1
-       WHERE LOWER(username) = $2
-       RETURNING id, username`,
-      [passwordHash, username],
+       WHERE LOWER(email) = $2
+       RETURNING id, name, email`,
+      [passwordHash, email],
     );
 
     if (result.rows.length === 0) {
@@ -343,9 +345,9 @@ app.get("/api/dashboard", requireAuth, async (_req, res) => {
 app.get("/api/users", requireAdmin, async (_req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, username, is_admin, created_at
+      `SELECT id, name, email, is_admin, created_at
        FROM users
-       ORDER BY username ASC`,
+       ORDER BY name ASC, email ASC`,
     );
     return res.json(result.rows);
   } catch (error) {
@@ -353,7 +355,7 @@ app.get("/api/users", requireAdmin, async (_req, res) => {
   }
 });
 
-app.get("/api/users/:id", requireAdmin, async (req, res) => {
+app.get("/api/users/:id(\\d+)", requireAdmin, async (req, res) => {
   const id = parsePositiveInt(req.params.id);
   if (!id) {
     return res.status(400).json({ error: "Valid ID is required." });
@@ -361,7 +363,7 @@ app.get("/api/users/:id", requireAdmin, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, username, is_admin, created_at
+      `SELECT id, name, email, is_admin, created_at
        FROM users
        WHERE id = $1`,
       [id],
@@ -378,65 +380,79 @@ app.get("/api/users/:id", requireAdmin, async (req, res) => {
 });
 
 app.post("/api/users", requireAdmin, async (req, res) => {
-  const username = normalizeText(req.body.username).toLowerCase();
+  const name = normalizeText(req.body.name);
+  const email = normalizeText(req.body.email).toLowerCase();
   const password = String(req.body.password || "");
   const isAdmin = Boolean(req.body.isAdmin);
 
-  if (!username || !password) {
-    return res.status(400).json({ error: "Username and password are required." });
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: "Name, email, and password are required." });
   }
 
   try {
+    const existing = await pool.query("SELECT id FROM users WHERE LOWER(email) = $1", [email]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: "Email already exists." });
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      `INSERT INTO users (username, password_hash, is_admin)
-       VALUES ($1, $2, $3)
-       RETURNING id, username, is_admin, created_at`,
-      [username, passwordHash, isAdmin],
+      `INSERT INTO users (name, email, password_hash, is_admin)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, name, email, is_admin, created_at`,
+      [name, email, passwordHash, isAdmin],
     );
 
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     if (error.code === "23505") {
-      return res.status(409).json({ error: "Username already exists." });
+      return res.status(409).json({ error: "Email already exists." });
     }
 
     return handleServerError(res, "Failed to create user", error);
   }
 });
 
-app.put("/api/users/:id", requireAdmin, async (req, res) => {
+app.put("/api/users/:id(\\d+)", requireAdmin, async (req, res) => {
   const id = parsePositiveInt(req.params.id);
-  const username = normalizeText(req.body.username).toLowerCase();
+  const name = normalizeText(req.body.name);
+  const email = normalizeText(req.body.email).toLowerCase();
   const password = String(req.body.password || "");
   const hasPassword = Boolean(password);
   const isAdmin = Boolean(req.body.isAdmin);
 
-  if (!id || !username) {
-    return res.status(400).json({ error: "Valid ID and username are required." });
+  if (!id || !name || !email) {
+    return res.status(400).json({ error: "Valid ID, name, and email are required." });
   }
 
   try {
+    const existing = await pool.query("SELECT id FROM users WHERE LOWER(email) = $1 AND id <> $2", [email, id]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: "Email already exists." });
+    }
+
     let result;
     if (hasPassword) {
       const passwordHash = await bcrypt.hash(password, 10);
       result = await pool.query(
         `UPDATE users
-         SET username = $1,
-             is_admin = $2,
-             password_hash = $3
-         WHERE id = $4
-         RETURNING id, username, is_admin, created_at`,
-        [username, isAdmin, passwordHash, id],
+         SET name = $1,
+             email = $2,
+             is_admin = $3,
+             password_hash = $4
+         WHERE id = $5
+         RETURNING id, name, email, is_admin, created_at`,
+        [name, email, isAdmin, passwordHash, id],
       );
     } else {
       result = await pool.query(
         `UPDATE users
-         SET username = $1,
-             is_admin = $2
-         WHERE id = $3
-         RETURNING id, username, is_admin, created_at`,
-        [username, isAdmin, id],
+         SET name = $1,
+             email = $2,
+             is_admin = $3
+         WHERE id = $4
+         RETURNING id, name, email, is_admin, created_at`,
+        [name, email, isAdmin, id],
       );
     }
 
@@ -445,21 +461,21 @@ app.put("/api/users/:id", requireAdmin, async (req, res) => {
     }
 
     if (req.session.userId === id) {
-      req.session.userName = result.rows[0].username;
+      req.session.userName = result.rows[0].name;
       req.session.userIsAdmin = result.rows[0].is_admin;
     }
 
     return res.json(result.rows[0]);
   } catch (error) {
     if (error.code === "23505") {
-      return res.status(409).json({ error: "Username already exists." });
+      return res.status(409).json({ error: "Email already exists." });
     }
 
     return handleServerError(res, "Failed to update user", error);
   }
 });
 
-app.delete("/api/users/:id", requireAdmin, async (req, res) => {
+app.delete("/api/users/:id(\\d+)", requireAdmin, async (req, res) => {
   const id = parsePositiveInt(req.params.id);
   if (!id) {
     return res.status(400).json({ error: "Valid ID is required." });
@@ -1901,362 +1917,600 @@ app.post("/api/schedule/prepopulate", requireAuth, async (req, res) => {
 // ── Ministry helpers ───────────────────────────────────────────────────────────
 
 const MINISTRY_ASSIGNABLE_TYPES = ["Deacon", "Yokefellow"];
+const WIDOW_TYPES = ["Widowed", "Home Bound"];
 
 function normalizeBoolean(value) {
-    return Boolean(value);
+  return Boolean(value);
 }
 
 function parseAmount(value) {
-    const amount = Number(value);
-    if (Number.isNaN(amount)) {
-        return null;
-    }
-    return amount;
+  const amount = Number(value);
+  if (Number.isNaN(amount)) {
+    return null;
+  }
+  return amount;
 }
 
 async function requireAssignableUser(deaconUserId) {
-    const result = await pool.query(
-        `SELECT id, email, type
+  const result = await pool.query(
+    `SELECT id, email, type
          FROM users
          WHERE id = $1
            AND type = ANY($2::text[])`,
-        [deaconUserId, MINISTRY_ASSIGNABLE_TYPES],
-    );
-    return result.rows[0] || null;
+    [deaconUserId, MINISTRY_ASSIGNABLE_TYPES],
+  );
+  return result.rows[0] || null;
+}
+
+function isAllowedWidowType(type) {
+  return WIDOW_TYPES.includes(type);
 }
 
 // ── Ministry: assignable users ─────────────────────────────────────────────────
 
 app.get("/api/users/assignable", requireAuth, async (_req, res) => {
-    try {
-        const result = await pool.query(
-            `SELECT id, name, email, type
+  try {
+    const result = await pool.query(
+      `SELECT id, name, email, type
              FROM users
              WHERE type = ANY($1::text[])
              ORDER BY email ASC`,
-            [MINISTRY_ASSIGNABLE_TYPES],
-        );
-        return res.json(result.rows);
-    } catch (error) {
-        return handleServerError(res, "Failed to load assignable users", error);
-    }
+      [MINISTRY_ASSIGNABLE_TYPES],
+    );
+    return res.json(result.rows);
+  } catch (error) {
+    return handleServerError(res, "Failed to load assignable users", error);
+  }
 });
 
 // ── Ministry: benevolence ──────────────────────────────────────────────────────
 
+app.get("/api/widows", requireAuth, async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT w.id, w.name, w.type, w.location, w.latest_notes, w.deacon_user_id, w.created_at, w.updated_at,
+              u.name AS deacon_name, u.email AS deacon_email, u.type AS deacon_type
+       FROM widows w
+       LEFT JOIN users u ON u.id = w.deacon_user_id
+       ORDER BY w.name ASC`,
+    );
+
+    return res.json(result.rows);
+  } catch (error) {
+    return handleServerError(res, "Failed to load widows", error);
+  }
+});
+
+app.post("/api/widows", requireAuth, async (req, res) => {
+  const name = normalizeText(req.body.name);
+  const type = normalizeText(req.body.type) || "Widowed";
+  const location = normalizeText(req.body.location);
+  const latestNotes = normalizeText(req.body.latestNotes);
+  const rawDeaconUserId = req.body.deaconUserId;
+  const deaconUserId =
+    rawDeaconUserId === undefined || rawDeaconUserId === null || rawDeaconUserId === ""
+      ? null
+      : Number(rawDeaconUserId);
+
+  if (!name) {
+    return res.status(400).json({ error: "Name is required." });
+  }
+
+  if (!isAllowedWidowType(type)) {
+    return res.status(400).json({ error: "Invalid widow type." });
+  }
+
+  if (deaconUserId !== null && Number.isNaN(deaconUserId)) {
+    return res.status(400).json({ error: "Invalid deacon selection." });
+  }
+
+  try {
+    if (deaconUserId !== null) {
+      const assignable = await requireAssignableUser(deaconUserId);
+      if (!assignable) {
+        return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+      }
+    }
+
+    const result = await pool.query(
+      `INSERT INTO widows (name, type, location, deacon_user_id, latest_notes)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, name, type, location, deacon_user_id, latest_notes, created_at, updated_at`,
+      [name, type, location, deaconUserId, latestNotes],
+    );
+
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    return handleServerError(res, "Failed to create widow", error);
+  }
+});
+
+app.put("/api/widows/:id", requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const name = normalizeText(req.body.name);
+  const type = normalizeText(req.body.type) || "Widowed";
+  const location = normalizeText(req.body.location);
+  const latestNotes = normalizeText(req.body.latestNotes);
+  const rawDeaconUserId = req.body.deaconUserId;
+  const deaconUserId =
+    rawDeaconUserId === undefined || rawDeaconUserId === null || rawDeaconUserId === ""
+      ? null
+      : Number(rawDeaconUserId);
+
+  if (!id || !name) {
+    return res.status(400).json({ error: "ID and name are required." });
+  }
+
+  if (!isAllowedWidowType(type)) {
+    return res.status(400).json({ error: "Invalid widow type." });
+  }
+
+  if (deaconUserId !== null && Number.isNaN(deaconUserId)) {
+    return res.status(400).json({ error: "Invalid deacon selection." });
+  }
+
+  try {
+    if (deaconUserId !== null) {
+      const assignable = await requireAssignableUser(deaconUserId);
+      if (!assignable) {
+        return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+      }
+    }
+
+    const result = await pool.query(
+      `UPDATE widows
+       SET name = $1,
+           type = $2,
+           location = $3,
+           deacon_user_id = $4,
+           latest_notes = $5,
+           updated_at = NOW()
+       WHERE id = $6
+       RETURNING id, name, type, location, deacon_user_id, latest_notes, created_at, updated_at`,
+      [name, type, location, deaconUserId, latestNotes, id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Widow not found." });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (error) {
+    return handleServerError(res, "Failed to update widow", error);
+  }
+});
+
+app.delete("/api/widows/:id", requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "ID is required." });
+  }
+
+  try {
+    const result = await pool.query("DELETE FROM widows WHERE id = $1 RETURNING id", [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Widow not found." });
+    }
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return handleServerError(res, "Failed to delete widow", error);
+  }
+});
+
 app.get("/api/benevolence", requireAuth, async (_req, res) => {
-    try {
-        const result = await pool.query(
-            `SELECT b.id, b.name, b.request, b.request_date, b.amount, b.is_filled, b.date_filled,
+  try {
+    const result = await pool.query(
+      `SELECT b.id, b.name, b.request, b.request_date, b.amount, b.is_filled, b.date_filled,
                     b.deacon_user_id, b.created_at, b.updated_at,
                     u.email AS deacon_email, u.type AS deacon_type
              FROM benevolence_requests b
              LEFT JOIN users u ON u.id = b.deacon_user_id
              ORDER BY b.request_date DESC, b.created_at DESC`,
-        );
-        return res.json(result.rows);
-    } catch (error) {
-        return handleServerError(res, "Failed to load benevolence requests", error);
-    }
+    );
+    return res.json(result.rows);
+  } catch (error) {
+    return handleServerError(res, "Failed to load benevolence requests", error);
+  }
 });
 
 app.post("/api/benevolence", requireAuth, async (req, res) => {
-    const name = normalizeText(req.body.name);
-    const request = normalizeText(req.body.request);
-    const requestDate = normalizeDate(req.body.requestDate);
-    const amount = parseAmount(req.body.amount);
-    const isFilled = normalizeBoolean(req.body.isFilled);
-    const dateFilled = normalizeDate(req.body.dateFilled);
-    const hasDeaconUserId = req.body.deaconUserId !== undefined && req.body.deaconUserId !== null && req.body.deaconUserId !== "";
-    const deaconUserId = hasDeaconUserId ? Number(req.body.deaconUserId) : null;
+  const name = normalizeText(req.body.name);
+  const request = normalizeText(req.body.request);
+  const requestDate = normalizeDate(req.body.requestDate);
+  const amount = parseAmount(req.body.amount);
+  const isFilled = normalizeBoolean(req.body.isFilled);
+  const dateFilled = normalizeDate(req.body.dateFilled);
+  const hasDeaconUserId = req.body.deaconUserId !== undefined && req.body.deaconUserId !== null && req.body.deaconUserId !== "";
+  const deaconUserId = hasDeaconUserId ? Number(req.body.deaconUserId) : null;
 
-    if (!name || !request || !requestDate || amount === null) {
-        return res.status(400).json({ error: "Name, request, request date, and amount are required." });
+  if (!name || !request || !requestDate || amount === null) {
+    return res.status(400).json({ error: "Name, request, request date, and amount are required." });
+  }
+
+  try {
+    if (deaconUserId !== null) {
+      const assignable = await requireAssignableUser(deaconUserId);
+      if (!assignable) {
+        return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+      }
     }
 
-    try {
-        if (deaconUserId !== null) {
-            const assignable = await requireAssignableUser(deaconUserId);
-            if (!assignable) {
-                return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
-            }
-        }
-
-        const result = await pool.query(
-            `INSERT INTO benevolence_requests (name, request, request_date, amount, is_filled, date_filled, deacon_user_id)
+    const result = await pool.query(
+      `INSERT INTO benevolence_requests (name, request, request_date, amount, is_filled, date_filled, deacon_user_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7)
              RETURNING *`,
-            [name, request, requestDate, amount, isFilled, isFilled ? dateFilled : null, deaconUserId],
-        );
-        return res.status(201).json(result.rows[0]);
-    } catch (error) {
-        return handleServerError(res, "Failed to create benevolence request", error);
-    }
+      [name, request, requestDate, amount, isFilled, isFilled ? dateFilled : null, deaconUserId],
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    return handleServerError(res, "Failed to create benevolence request", error);
+  }
 });
 
 app.put("/api/benevolence/:id", requireAuth, async (req, res) => {
-    const id = Number(req.params.id);
-    const name = normalizeText(req.body.name);
-    const request = normalizeText(req.body.request);
-    const requestDate = normalizeDate(req.body.requestDate);
-    const amount = parseAmount(req.body.amount);
-    const isFilled = normalizeBoolean(req.body.isFilled);
-    const dateFilled = normalizeDate(req.body.dateFilled);
-    const hasDeaconUserId = req.body.deaconUserId !== undefined && req.body.deaconUserId !== null && req.body.deaconUserId !== "";
-    const deaconUserId = hasDeaconUserId ? Number(req.body.deaconUserId) : null;
+  const id = Number(req.params.id);
+  const name = normalizeText(req.body.name);
+  const request = normalizeText(req.body.request);
+  const requestDate = normalizeDate(req.body.requestDate);
+  const amount = parseAmount(req.body.amount);
+  const isFilled = normalizeBoolean(req.body.isFilled);
+  const dateFilled = normalizeDate(req.body.dateFilled);
+  const hasDeaconUserId = req.body.deaconUserId !== undefined && req.body.deaconUserId !== null && req.body.deaconUserId !== "";
+  const deaconUserId = hasDeaconUserId ? Number(req.body.deaconUserId) : null;
 
-    if (!id || !name || !request || !requestDate || amount === null) {
-        return res.status(400).json({ error: "ID, name, request, request date, and amount are required." });
+  if (!id || !name || !request || !requestDate || amount === null) {
+    return res.status(400).json({ error: "ID, name, request, request date, and amount are required." });
+  }
+
+  try {
+    if (deaconUserId !== null) {
+      const assignable = await requireAssignableUser(deaconUserId);
+      if (!assignable) {
+        return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+      }
     }
 
-    try {
-        if (deaconUserId !== null) {
-            const assignable = await requireAssignableUser(deaconUserId);
-            if (!assignable) {
-                return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
-            }
-        }
-
-        const result = await pool.query(
-            `UPDATE benevolence_requests
+    const result = await pool.query(
+      `UPDATE benevolence_requests
              SET name = $1, request = $2, request_date = $3, amount = $4,
                  is_filled = $5, date_filled = $6, deacon_user_id = $7, updated_at = NOW()
              WHERE id = $8
              RETURNING *`,
-            [name, request, requestDate, amount, isFilled, isFilled ? dateFilled : null, deaconUserId, id],
-        );
+      [name, request, requestDate, amount, isFilled, isFilled ? dateFilled : null, deaconUserId, id],
+    );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: "Benevolence request not found." });
-        }
-        return res.json(result.rows[0]);
-    } catch (error) {
-        return handleServerError(res, "Failed to update benevolence request", error);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Benevolence request not found." });
     }
+    return res.json(result.rows[0]);
+  } catch (error) {
+    return handleServerError(res, "Failed to update benevolence request", error);
+  }
 });
 
 app.delete("/api/benevolence/:id", requireAuth, async (req, res) => {
-    const id = Number(req.params.id);
-    if (!id) {
-        return res.status(400).json({ error: "ID is required." });
-    }
+  const id = Number(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "ID is required." });
+  }
 
-    try {
-        const result = await pool.query("DELETE FROM benevolence_requests WHERE id = $1 RETURNING id", [id]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: "Benevolence request not found." });
-        }
-        return res.json({ ok: true });
-    } catch (error) {
-        return handleServerError(res, "Failed to delete benevolence request", error);
+  try {
+    const result = await pool.query("DELETE FROM benevolence_requests WHERE id = $1 RETURNING id", [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Benevolence request not found." });
     }
+    return res.json({ ok: true });
+  } catch (error) {
+    return handleServerError(res, "Failed to delete benevolence request", error);
+  }
 });
 
 // ── Ministry: work requests ────────────────────────────────────────────────────
 
 app.get("/api/work", requireAuth, async (_req, res) => {
-    try {
-        const result = await pool.query(
-            `SELECT w.id, w.name, w.request, w.request_date, w.is_fulfilled, w.date_fulfilled,
+  try {
+    const result = await pool.query(
+      `SELECT w.id, w.name, w.request, w.request_date, w.is_fulfilled, w.date_fulfilled,
                     w.deacon_user_id, w.created_at, w.updated_at,
                     u.email AS deacon_email, u.type AS deacon_type
              FROM work_requests w
              LEFT JOIN users u ON u.id = w.deacon_user_id
              ORDER BY w.request_date DESC, w.created_at DESC`,
-        );
-        return res.json(result.rows);
-    } catch (error) {
-        return handleServerError(res, "Failed to load work requests", error);
-    }
+    );
+    return res.json(result.rows);
+  } catch (error) {
+    return handleServerError(res, "Failed to load work requests", error);
+  }
 });
 
 app.post("/api/work", requireAuth, async (req, res) => {
-    const name = normalizeText(req.body.name);
-    const request = normalizeText(req.body.request);
-    const requestDate = normalizeDate(req.body.requestDate);
-    const isFulfilled = normalizeBoolean(req.body.isFulfilled);
-    const dateFulfilled = normalizeDate(req.body.dateFulfilled);
-    const hasDeaconUserId = req.body.deaconUserId !== undefined && req.body.deaconUserId !== null && req.body.deaconUserId !== "";
-    const deaconUserId = hasDeaconUserId ? Number(req.body.deaconUserId) : null;
+  const name = normalizeText(req.body.name);
+  const request = normalizeText(req.body.request);
+  const requestDate = normalizeDate(req.body.requestDate);
+  const isFulfilled = normalizeBoolean(req.body.isFulfilled);
+  const dateFulfilled = normalizeDate(req.body.dateFulfilled);
+  const hasDeaconUserId = req.body.deaconUserId !== undefined && req.body.deaconUserId !== null && req.body.deaconUserId !== "";
+  const deaconUserId = hasDeaconUserId ? Number(req.body.deaconUserId) : null;
 
-    if (!name || !request || !requestDate) {
-        return res.status(400).json({ error: "Name, request, and request date are required." });
+  if (!name || !request || !requestDate) {
+    return res.status(400).json({ error: "Name, request, and request date are required." });
+  }
+
+  try {
+    if (deaconUserId !== null) {
+      const assignable = await requireAssignableUser(deaconUserId);
+      if (!assignable) {
+        return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+      }
     }
 
-    try {
-        if (deaconUserId !== null) {
-            const assignable = await requireAssignableUser(deaconUserId);
-            if (!assignable) {
-                return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
-            }
-        }
-
-        const result = await pool.query(
-            `INSERT INTO work_requests (name, request, request_date, is_fulfilled, date_fulfilled, deacon_user_id)
+    const result = await pool.query(
+      `INSERT INTO work_requests (name, request, request_date, is_fulfilled, date_fulfilled, deacon_user_id)
              VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING *`,
-            [name, request, requestDate, isFulfilled, isFulfilled ? dateFulfilled : null, deaconUserId],
-        );
-        return res.status(201).json(result.rows[0]);
-    } catch (error) {
-        return handleServerError(res, "Failed to create work request", error);
-    }
+      [name, request, requestDate, isFulfilled, isFulfilled ? dateFulfilled : null, deaconUserId],
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    return handleServerError(res, "Failed to create work request", error);
+  }
 });
 
 app.put("/api/work/:id", requireAuth, async (req, res) => {
-    const id = Number(req.params.id);
-    const name = normalizeText(req.body.name);
-    const request = normalizeText(req.body.request);
-    const requestDate = normalizeDate(req.body.requestDate);
-    const isFulfilled = normalizeBoolean(req.body.isFulfilled);
-    const dateFulfilled = normalizeDate(req.body.dateFulfilled);
-    const hasDeaconUserId = req.body.deaconUserId !== undefined && req.body.deaconUserId !== null && req.body.deaconUserId !== "";
-    const deaconUserId = hasDeaconUserId ? Number(req.body.deaconUserId) : null;
+  const id = Number(req.params.id);
+  const name = normalizeText(req.body.name);
+  const request = normalizeText(req.body.request);
+  const requestDate = normalizeDate(req.body.requestDate);
+  const isFulfilled = normalizeBoolean(req.body.isFulfilled);
+  const dateFulfilled = normalizeDate(req.body.dateFulfilled);
+  const hasDeaconUserId = req.body.deaconUserId !== undefined && req.body.deaconUserId !== null && req.body.deaconUserId !== "";
+  const deaconUserId = hasDeaconUserId ? Number(req.body.deaconUserId) : null;
 
-    if (!id || !name || !request || !requestDate) {
-        return res.status(400).json({ error: "ID, name, request, and request date are required." });
+  if (!id || !name || !request || !requestDate) {
+    return res.status(400).json({ error: "ID, name, request, and request date are required." });
+  }
+
+  try {
+    if (deaconUserId !== null) {
+      const assignable = await requireAssignableUser(deaconUserId);
+      if (!assignable) {
+        return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
+      }
     }
 
-    try {
-        if (deaconUserId !== null) {
-            const assignable = await requireAssignableUser(deaconUserId);
-            if (!assignable) {
-                return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
-            }
-        }
-
-        const result = await pool.query(
-            `UPDATE work_requests
+    const result = await pool.query(
+      `UPDATE work_requests
              SET name = $1, request = $2, request_date = $3,
                  is_fulfilled = $4, date_fulfilled = $5, deacon_user_id = $6, updated_at = NOW()
              WHERE id = $7
              RETURNING *`,
-            [name, request, requestDate, isFulfilled, isFulfilled ? dateFulfilled : null, deaconUserId, id],
-        );
+      [name, request, requestDate, isFulfilled, isFulfilled ? dateFulfilled : null, deaconUserId, id],
+    );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: "Work request not found." });
-        }
-        return res.json(result.rows[0]);
-    } catch (error) {
-        return handleServerError(res, "Failed to update work request", error);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Work request not found." });
     }
+    return res.json(result.rows[0]);
+  } catch (error) {
+    return handleServerError(res, "Failed to update work request", error);
+  }
 });
 
 app.delete("/api/work/:id", requireAuth, async (req, res) => {
-    const id = Number(req.params.id);
-    if (!id) {
-        return res.status(400).json({ error: "ID is required." });
-    }
+  const id = Number(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "ID is required." });
+  }
 
-    try {
-        const result = await pool.query("DELETE FROM work_requests WHERE id = $1 RETURNING id", [id]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: "Work request not found." });
-        }
-        return res.json({ ok: true });
-    } catch (error) {
-        return handleServerError(res, "Failed to delete work request", error);
+  try {
+    const result = await pool.query("DELETE FROM work_requests WHERE id = $1 RETURNING id", [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Work request not found." });
     }
+    return res.json({ ok: true });
+  } catch (error) {
+    return handleServerError(res, "Failed to delete work request", error);
+  }
 });
 
 // ── Ministry: calendar (schedule entries) ─────────────────────────────────────
 
 app.get("/api/calendar", requireAuth, async (req, res) => {
-    const month = String(req.query.month || "").trim();
+  const month = String(req.query.month || "").trim();
 
-    try {
-        if (!month) {
-            const result = await pool.query(
-                `SELECT s.*, u.email AS created_by_email, u.name AS created_by_name
+  try {
+    if (!month) {
+      const result = await pool.query(
+        `SELECT s.*, u.email AS created_by_email, u.name AS created_by_name
                  FROM schedule_entries s
                  LEFT JOIN users u ON u.id = s.created_by_user_id
                  ORDER BY s.entry_date ASC, s.created_at ASC`,
-            );
-            return res.json(result.rows);
-        }
+      );
+      return res.json(result.rows);
+    }
 
-        const monthStart = `${month}-01`;
-        const result = await pool.query(
-            `SELECT s.*, u.email AS created_by_email, u.name AS created_by_name
+    const monthStart = `${month}-01`;
+    const result = await pool.query(
+      `SELECT s.*, u.email AS created_by_email, u.name AS created_by_name
              FROM schedule_entries s
              LEFT JOIN users u ON u.id = s.created_by_user_id
              WHERE DATE_TRUNC('month', s.entry_date) = DATE_TRUNC('month', $1::date)
              ORDER BY s.entry_date ASC, s.created_at ASC`,
-            [monthStart],
-        );
-        return res.json(result.rows);
-    } catch (error) {
-        return handleServerError(res, "Failed to load calendar entries", error);
-    }
+      [monthStart],
+    );
+    return res.json(result.rows);
+  } catch (error) {
+    return handleServerError(res, "Failed to load calendar entries", error);
+  }
 });
 
 app.post("/api/calendar", requireAuth, async (req, res) => {
-    const title = normalizeText(req.body.title);
-    const details = normalizeText(req.body.details);
-    const entryDate = normalizeDate(req.body.entryDate);
-    const createdByUserId = req.session.userId;
+  const title = normalizeText(req.body.title);
+  const details = normalizeText(req.body.details);
+  const entryDate = normalizeDate(req.body.entryDate);
+  const createdByUserId = req.session.userId;
 
-    if (!title || !entryDate) {
-        return res.status(400).json({ error: "Title and date are required." });
-    }
+  if (!title || !entryDate) {
+    return res.status(400).json({ error: "Title and date are required." });
+  }
 
-    try {
-        const result = await pool.query(
-            `INSERT INTO schedule_entries (title, details, entry_date, created_by_user_id)
+  try {
+    const result = await pool.query(
+      `INSERT INTO schedule_entries (title, details, entry_date, created_by_user_id)
              VALUES ($1, $2, $3, $4)
              RETURNING *`,
-            [title, details, entryDate, createdByUserId],
-        );
-        return res.status(201).json(result.rows[0]);
-    } catch (error) {
-        return handleServerError(res, "Failed to create calendar entry", error);
-    }
+      [title, details, entryDate, createdByUserId],
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    return handleServerError(res, "Failed to create calendar entry", error);
+  }
 });
 
 app.put("/api/calendar/:id", requireAuth, async (req, res) => {
-    const id = Number(req.params.id);
-    const title = normalizeText(req.body.title);
-    const details = normalizeText(req.body.details);
-    const entryDate = normalizeDate(req.body.entryDate);
+  const id = Number(req.params.id);
+  const title = normalizeText(req.body.title);
+  const details = normalizeText(req.body.details);
+  const entryDate = normalizeDate(req.body.entryDate);
 
-    if (!id || !title || !entryDate) {
-        return res.status(400).json({ error: "ID, title, and date are required." });
-    }
+  if (!id || !title || !entryDate) {
+    return res.status(400).json({ error: "ID, title, and date are required." });
+  }
 
-    try {
-        const result = await pool.query(
-            `UPDATE schedule_entries
+  try {
+    const result = await pool.query(
+      `UPDATE schedule_entries
              SET title = $1, details = $2, entry_date = $3, updated_at = NOW()
              WHERE id = $4
              RETURNING *`,
-            [title, details, entryDate, id],
-        );
+      [title, details, entryDate, id],
+    );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: "Calendar entry not found." });
-        }
-        return res.json(result.rows[0]);
-    } catch (error) {
-        return handleServerError(res, "Failed to update calendar entry", error);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Calendar entry not found." });
     }
+    return res.json(result.rows[0]);
+  } catch (error) {
+    return handleServerError(res, "Failed to update calendar entry", error);
+  }
 });
 
 app.delete("/api/calendar/:id", requireAuth, async (req, res) => {
-    const id = Number(req.params.id);
-    if (!id) {
-        return res.status(400).json({ error: "ID is required." });
+  const id = Number(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "ID is required." });
+  }
+
+  try {
+    const result = await pool.query("DELETE FROM schedule_entries WHERE id = $1 RETURNING id", [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Calendar entry not found." });
+    }
+    return res.json({ ok: true });
+  } catch (error) {
+    return handleServerError(res, "Failed to delete calendar entry", error);
+  }
+});
+
+// ── Ministry: information ─────────────────────────────────────────────────────
+
+app.get("/api/information", requireAuth, async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT i.*, u.email AS deacon_email, u.type AS deacon_type
+       FROM information_entries i
+       JOIN users u ON u.id = i.deacon_user_id
+       ORDER BY i.created_at DESC`,
+    );
+
+    return res.json(result.rows);
+  } catch (error) {
+    return handleServerError(res, "Failed to load information entries", error);
+  }
+});
+
+app.post("/api/information", requireAuth, async (req, res) => {
+  const title = normalizeText(req.body.title);
+  const details = normalizeText(req.body.details);
+  const deaconUserId = Number(req.body.deaconUserId);
+
+  if (!title || !details || !deaconUserId) {
+    return res.status(400).json({ error: "Title, details, and deacon selection are required." });
+  }
+
+  try {
+    const assignable = await requireAssignableUser(deaconUserId);
+    if (!assignable) {
+      return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
     }
 
-    try {
-        const result = await pool.query("DELETE FROM schedule_entries WHERE id = $1 RETURNING id", [id]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: "Calendar entry not found." });
-        }
-        return res.json({ ok: true });
-    } catch (error) {
-        return handleServerError(res, "Failed to delete calendar entry", error);
+    const result = await pool.query(
+      `INSERT INTO information_entries (title, details, deacon_user_id)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [title, details, deaconUserId],
+    );
+
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    return handleServerError(res, "Failed to create information entry", error);
+  }
+});
+
+app.put("/api/information/:id", requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const title = normalizeText(req.body.title);
+  const details = normalizeText(req.body.details);
+  const deaconUserId = Number(req.body.deaconUserId);
+
+  if (!id || !title || !details || !deaconUserId) {
+    return res.status(400).json({ error: "ID, title, details, and deacon selection are required." });
+  }
+
+  try {
+    const assignable = await requireAssignableUser(deaconUserId);
+    if (!assignable) {
+      return res.status(400).json({ error: "Selected user must be a Deacon or Yokefellow." });
     }
+
+    const result = await pool.query(
+      `UPDATE information_entries
+       SET title = $1,
+           details = $2,
+           deacon_user_id = $3,
+           updated_at = NOW()
+       WHERE id = $4
+       RETURNING *`,
+      [title, details, deaconUserId, id],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Information entry not found." });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (error) {
+    return handleServerError(res, "Failed to update information entry", error);
+  }
+});
+
+app.delete("/api/information/:id", requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "ID is required." });
+  }
+
+  try {
+    const result = await pool.query("DELETE FROM information_entries WHERE id = $1 RETURNING id", [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Information entry not found." });
+    }
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return handleServerError(res, "Failed to delete information entry", error);
+  }
 });
 
 app.listen(PORT, () => {

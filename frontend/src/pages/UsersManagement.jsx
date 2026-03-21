@@ -17,6 +17,14 @@ import { createUser, deleteUser, getUsers, updateUser } from "../api/scheduler";
 import PageShell from "../components/PageShell";
 import { formatDisplayDate } from "../utils/date";
 
+function getSortableUserLabel(user) {
+    return String(user.name || user.email || "").toLowerCase();
+}
+
+function getDisplayUserLabel(user) {
+    return String(user.name || user.email || "(no name)");
+}
+
 function UsersManagement() {
     const [users, setUsers] = useState([]);
     const [error, setError] = useState("");
@@ -24,7 +32,8 @@ function UsersManagement() {
     const [saving, setSaving] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [form, setForm] = useState({
-        username: "",
+        name: "",
+        email: "",
         password: "",
         isAdmin: false,
     });
@@ -48,14 +57,18 @@ function UsersManagement() {
     }, []);
 
     const sortedUsers = useMemo(
-        () => [...users].sort((left, right) => left.username.localeCompare(right.username)),
+        () =>
+            [...users].sort((left, right) =>
+                getSortableUserLabel(left).localeCompare(getSortableUserLabel(right)),
+            ),
         [users],
     );
 
     function beginEdit(user) {
         setEditingId(user.id);
         setForm({
-            username: user.username,
+            name: String(user.name || ""),
+            email: String(user.email || ""),
             password: "",
             isAdmin: Boolean(user.is_admin),
         });
@@ -63,7 +76,7 @@ function UsersManagement() {
 
     function clearEdit() {
         setEditingId(null);
-        setForm({ username: "", password: "", isAdmin: false });
+        setForm({ name: "", email: "", password: "", isAdmin: false });
     }
 
     async function handleSubmit(event) {
@@ -74,13 +87,15 @@ function UsersManagement() {
         try {
             if (editingId) {
                 await updateUser(editingId, {
-                    username: form.username,
+                    name: form.name,
+                    email: form.email,
                     password: form.password,
                     isAdmin: form.isAdmin,
                 });
             } else {
                 await createUser({
-                    username: form.username,
+                    name: form.name,
+                    email: form.email,
                     password: form.password,
                     isAdmin: form.isAdmin,
                 });
@@ -120,9 +135,16 @@ function UsersManagement() {
             <Box component="form" className="hero-card form-stack" onSubmit={handleSubmit} sx={{ mb: 2 }}>
                 <Typography variant="h5">{editingId ? `Edit user #${editingId}` : "Create user"}</Typography>
                 <TextField
-                    label="Username"
-                    value={form.username}
-                    onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))}
+                    label="Name"
+                    value={form.name}
+                    onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                    required
+                />
+                <TextField
+                    label="Email"
+                    type="email"
+                    value={form.email}
+                    onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
                     required
                 />
                 <TextField
@@ -157,7 +179,8 @@ function UsersManagement() {
                 <Table size="small" aria-label="auth users table">
                     <TableHead>
                         <TableRow>
-                            <TableCell>Username</TableCell>
+                            <TableCell>Name</TableCell>
+                            <TableCell>Email</TableCell>
                             <TableCell>Admin</TableCell>
                             <TableCell>Created</TableCell>
                             <TableCell align="right">Actions</TableCell>
@@ -166,7 +189,8 @@ function UsersManagement() {
                     <TableBody>
                         {sortedUsers.map((user) => (
                             <TableRow key={user.id} hover selected={editingId === user.id}>
-                                <TableCell>{user.username}</TableCell>
+                                <TableCell>{getDisplayUserLabel(user)}</TableCell>
+                                <TableCell>{user.email || ""}</TableCell>
                                 <TableCell>{user.is_admin ? "Yes" : "No"}</TableCell>
                                 <TableCell>{formatDisplayDate(user.created_at)}</TableCell>
                                 <TableCell align="right">

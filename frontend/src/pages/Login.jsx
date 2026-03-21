@@ -12,7 +12,7 @@ import { login } from "../api/auth";
 function Login({ onAuthenticated }) {
     const location = useLocation();
     const navigate = useNavigate();
-    const [username, setUsername] = useState("rob");
+    const [email, setEmail] = useState("rob@example.com");
     const [password, setPassword] = useState("asdf");
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
@@ -25,7 +25,7 @@ function Login({ onAuthenticated }) {
         setError("");
 
         try {
-            const user = await login(username, password);
+            const user = await login(email, password);
             onAuthenticated(user);
             navigate(redirectTarget, { replace: true });
         } catch (requestError) {
@@ -43,13 +43,14 @@ function Login({ onAuthenticated }) {
                 </Typography>
                 <Typography variant="h3">Sign in</Typography>
                 <Typography variant="body1" color="text.secondary">
-                    Starter account: <strong>rob</strong> / <strong>asdf</strong>
+                    Starter account: <strong>rob@example.com</strong> / <strong>asdf</strong>
                 </Typography>
                 {error ? <Alert severity="error">{error}</Alert> : null}
                 <TextField
-                    label="Username"
-                    value={username}
-                    onChange={(event) => setUsername(event.target.value)}
+                    label="Email"
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
                     required
                 />
                 <TextField
