@@ -13,7 +13,7 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 
-import { createUser, deleteUser, getUsers, updateUser } from "../api/scheduler";
+import { createUser, deleteUser, getUsers, updateUser } from "../api/ministry";
 import PageShell from "../components/PageShell";
 import { formatDisplayDate } from "../utils/date";
 

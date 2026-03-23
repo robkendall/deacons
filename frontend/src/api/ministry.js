@@ -1,3 +1,5 @@
+import { apiFetch } from "./client";
+
 async function readJson(response) {
     const data = await response.json().catch(() => ({}));
 
@@ -9,8 +11,7 @@ async function readJson(response) {
 }
 
 async function request(path, options = {}) {
-    const response = await fetch(path, {
-        credentials: "include",
+    const response = await apiFetch(path, {
         headers: {
             "Content-Type": "application/json",
             ...(options.headers || {}),
@@ -29,10 +30,23 @@ export function getUsers() {
     return request("/api/users");
 }
 
+export function createUser(payload) {
+    return request("/api/users", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+}
+
 export function updateUser(id, payload) {
     return request(`/api/users/${id}`, {
         method: "PUT",
         body: JSON.stringify(payload),
+    });
+}
+
+export function deleteUser(id) {
+    return request(`/api/users/${id}`, {
+        method: "DELETE",
     });
 }
 
